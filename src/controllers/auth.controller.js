@@ -13,7 +13,37 @@ import { signToken } from '../utils/jwt.js';
  */
 export async function register(req, res, next) {
   try {
-    // Your code here
+    const { name, email, password } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: { message: 'Name, email, and password are required' } });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: { message: 'Password must be at least 6 characters long' } });
+    }
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: { message: 'Invalid email format' } });
+    }
+
+    const newEmail = email.toLowerCase();
+    const newName = name.trim();
+
+    const exists = await User.findOne({ email: newEmail });
+    if (exists) return res.status(409).json({ error: { message: "Email already exists" } });
+
+    const user = await User.create({
+      name: newName,
+      email: newEmail,
+      password,
+    });
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    return res.status(201).json({ user: safeUser });
   } catch (error) {
     next(error);
   }
@@ -33,6 +63,19 @@ export async function register(req, res, next) {
 export async function login(req, res, next) {
   try {
     // Your code here
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: { message: 'email, and password are required' } });
+
+    const exists = await User.findOne({ email }).select('+password')
+    if (!exists) return res.status(401).json({ error: { message: "Invalid credentials" } });
+    const user = exists.toObject()
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) return res.status(401).json({ error: { message: "Invalid credentials" } });
+    const payload = { userId: user._id, email: user.email, role: user.role }
+    const token = signToken(payload)
+    delete user.password;
+
+    return res.status(200).json({ token, user })
   } catch (error) {
     next(error);
   }
@@ -47,6 +90,7 @@ export async function login(req, res, next) {
 export async function me(req, res, next) {
   try {
     // Your code here
+    return res.status(200).json({ user: req.user })
   } catch (error) {
     next(error);
   }
